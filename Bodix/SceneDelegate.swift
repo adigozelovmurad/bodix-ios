@@ -9,7 +9,14 @@ import UIKit
 
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
+    
+
     var window: UIWindow?
+    
+    func sceneDidBecomeActive(_ scene: UIScene) {
+        StepsManager.shared.prewarm()
+    }
+
 
     func scene(_ scene: UIScene,
                willConnectTo session: UISceneSession,
@@ -21,5 +28,8 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.rootViewController = MainTabBarController()
         window.makeKeyAndVisible()
         self.window = window
+
+        
     }
+    
 }

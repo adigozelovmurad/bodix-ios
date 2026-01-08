@@ -23,6 +23,7 @@ final class HomeCardView: UIControl {
     private let progressView = CircularProgressView()
     private let miniChartView = HomeMiniChartView()
 
+    // MARK: - Init
     init(
         title: String,
         subtitle: String,
@@ -39,6 +40,7 @@ final class HomeCardView: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: - UI
     private func setupUI() {
         backgroundColor = .secondarySystemBackground
         layer.cornerRadius = 16
@@ -101,30 +103,45 @@ final class HomeCardView: UIControl {
 
     // MARK: - Public API
 
+    /// 🔵 Circle + number
     func updateSteps(current: Int, goal: Int) {
         valueLabel.text = "\(current)"
 
         let progress = min(Double(current) / Double(goal), 1.0)
         progressView.setProgress(progress, animated: true)
-
-        let color: UIColor
-        if progress >= 1 {
-            color = .systemGreen
-        } else if progress > 0.7 {
-            color = .systemOrange
-        } else {
-            color = .systemBlue
-        }
-
-        progressView.setColor(color)
-        miniChartView.update(progress: progress, color: color)
+        progressView.setColor(color(for: progress))
     }
 
+    /// 📊 Mini chart (Steps card only)
+    
+    func updateChart(values: [Int], progress: Double) {
+        guard cardType == .steps else { return }
+
+        let color = color(for: progress)
+
+        miniChartView.update(
+            values: values,
+            progress: progress,
+            color: color
+        )
+    }
 
     func updateSubtitle(_ text: String) {
         subtitleLabel.text = text
     }
 
+    // MARK: - Helpers
+    private func color(for progress: Double) -> UIColor {
+        if progress >= 1 {
+            return .systemGreen
+        } else if progress > 0.7 {
+            return .systemOrange
+        } else {
+            return .systemBlue
+        }
+    }
+
+    // MARK: - Touch
     @objc private func touchDown() {
         UIView.animate(withDuration: 0.1) {
             self.alpha = 0.6

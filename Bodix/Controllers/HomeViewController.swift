@@ -58,7 +58,6 @@ final class HomeViewController: UIViewController {
         type: .steps
     )
 
-
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -70,7 +69,6 @@ final class HomeViewController: UIViewController {
         observeGoalChanges()
     }
 
-
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         loadTodaySteps()
@@ -78,48 +76,102 @@ final class HomeViewController: UIViewController {
 
     // MARK: - Data
     private func loadTodaySteps() {
-        let goal = StepsManager.shared.dailyGoal
+        Task {
+            let goal = StepsManager.shared.dailyGoal
 
-        StepsManager.shared.fetchTodaySteps { [weak self] todaySteps in
-            guard let self else { return }
+            // ✅ Parallel fetch - daha sürətli
+            async let todaySteps = fetchTodayStepsAsync()
+            async let hourlyValues = fetchHourlyStepsAsync()
+            async let yesterdaySteps = fetchYesterdayStepsAsync()
 
-            // Top stats
-            self.stepsStat.update(value: "\(todaySteps)")
+            let (today, hourly, yesterday) = await (todaySteps, hourlyValues, yesterdaySteps)
 
-            let calories = Int(Double(todaySteps) * 0.04)
-            self.caloriesStat.update(value: "\(calories) kcal")
+            // ✅ Main thread-də UI update
+            await updateUI(
+                todaySteps: today,
+                goal: goal,
+                hourlyValues: hourly,
+                yesterdaySteps: yesterday
+            )
+        }
+    }
 
-            // 🔵 Steps card (circle)
-            self.stepsCard.updateSteps(current: todaySteps, goal: goal)
+    @MainActor
+    private func updateUI(
+        todaySteps: Int,
+        goal: Int,
+        hourlyValues: [Int],
+        yesterdaySteps: Int
+    ) {
+        // 🔹 Top stats
+        stepsStat.update(value: "\(todaySteps)")
+        let calories = Int(Double(todaySteps) * 0.04)
+        caloriesStat.update(value: "\(calories) kcal")
 
-            // 🔵 Mini chart (HOME)
-            StepsManager.shared.fetchHourlySteps { values in
-                let progress = Double(todaySteps) / Double(goal)
-                self.stepsCard.updateSteps(current: todaySteps, goal: goal)
+        // 🔹 Progress
+        let progress = min(Double(todaySteps) / Double(goal), 1.0)
+
+        // 🔵 Circle
+        stepsCard.updateSteps(current: todaySteps, goal: goal)
+
+        // 🎨 Circle ilə EYNİ chart rəngi
+//        let chartColor: UIColor =
+//            progress >= 1 ? .systemGreen :
+//            progress > 0.7 ? .systemOrange :
+//            .systemBlue
+
+        // 📊 Mini chart (ARTIQ progress YOX)
+        stepsCard.updateChart(
+            values: hourlyValues,
+            progress: progress
+        )
 
 
-            }
+        // 🔥 Yesterday + streak
+        let diff = todaySteps - yesterdaySteps
+        let sign = diff >= 0 ? "+" : ""
+        let diffText = "\(sign)\(diff) vs yesterday"
+
+        let streak = StepsManager.shared.updateStreakIfNeeded(
+            todaySteps: todaySteps
+        )
+
+        if streak > 0 {
+            stepsCard.updateSubtitle(
+                "Today • \(diffText) • 🔥 \(streak)d"
+            )
+        } else {
+            stepsCard.updateSubtitle(
+                "Today • \(diffText)"
+            )
+        }
+    }
 
 
-            // Yesterday + streak
-            StepsManager.shared.fetchYesterdaySteps { yesterdaySteps in
-                let diff = todaySteps - yesterdaySteps
-                let sign = diff >= 0 ? "+" : ""
-                let diffText = "\(sign)\(diff) vs yesterday"
-
-                let streak = StepsManager.shared.updateStreakIfNeeded(
-                    todaySteps: todaySteps
-                )
-
-                if streak > 0 {
-                    self.stepsCard.updateSubtitle("Today • \(diffText) • 🔥 \(streak)d")
-                } else {
-                    self.stepsCard.updateSubtitle("Today • \(diffText)")
-                }
+    // MARK: - Async Helpers
+    private func fetchTodayStepsAsync() async -> Int {
+        await withCheckedContinuation { continuation in
+            StepsManager.shared.fetchTodaySteps { steps in
+                continuation.resume(returning: steps)
             }
         }
     }
 
+    private func fetchHourlyStepsAsync() async -> [Int] {
+        await withCheckedContinuation { continuation in
+            StepsManager.shared.fetchHourlySteps { values in
+                continuation.resume(returning: values)
+            }
+        }
+    }
+
+    private func fetchYesterdayStepsAsync() async -> Int {
+        await withCheckedContinuation { continuation in
+            StepsManager.shared.fetchYesterdaySteps { steps in
+                continuation.resume(returning: steps)
+            }
+        }
+    }
 
     private func observeGoalChanges() {
         NotificationCenter.default.addObserver(
@@ -130,7 +182,6 @@ final class HomeViewController: UIViewController {
         )
     }
 
-
     // MARK: - Layout
     private func setupLayout() {
         view.addSubview(scrollView)
@@ -140,7 +191,11 @@ final class HomeViewController: UIViewController {
             contentView.addSubview($0)
         }
 
-        let statsStack = UIStackView(arrangedSubviews: [stepsStat, timeStat, caloriesStat])
+        let statsStack = UIStackView(arrangedSubviews: [
+            stepsStat,
+            timeStat,
+            caloriesStat
+        ])
         statsStack.axis = .horizontal
         statsStack.spacing = 12
         statsStack.distribution = .fillEqually
@@ -205,16 +260,14 @@ final class HomeViewController: UIViewController {
     }
 
     @objc private func openSteps() {
-        let vc = StepsViewController()
+        stepsCard.isUserInteractionEnabled = false
 
-        // 🔥 Smooth hiss üçün
-        vc.hidesBottomBarWhenPushed = true
-
-        // Haptic
-        let impact = UIImpactFeedbackGenerator(style: .light)
-        impact.impactOccurred()
-
-        navigationController?.pushViewController(vc, animated: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            let vc = StepsViewController()
+            vc.hidesBottomBarWhenPushed = true
+            self.navigationController?.pushViewController(vc, animated: true)
+            self.stepsCard.isUserInteractionEnabled = true
+        }
     }
 
 
@@ -225,7 +278,6 @@ final class HomeViewController: UIViewController {
     @objc private func goalDidChange() {
         loadTodaySteps()
     }
-
 
     // MARK: - Helpers
     private func greetingText() -> String {

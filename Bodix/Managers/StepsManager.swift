@@ -41,6 +41,19 @@ final class StepsManager {
         }
     }
 
+    // MARK: - 🔥 PREWARM (UI FREEZE FIX)
+    /// CoreMotion-u əvvəlcədən oyadır (ilk run lag qarşısını alır)
+    func prewarm() {
+        guard CMPedometer.isStepCountingAvailable() else { return }
+
+        let now = Date()
+        let start = Calendar.current.date(byAdding: .minute, value: -1, to: now)!
+
+        pedometer.queryPedometerData(from: start, to: now) { _, _ in
+            // intentionally empty – sensor warm-up
+        }
+    }
+
     // MARK: - Today Steps
     func fetchTodaySteps(completion: @escaping (Int) -> Void) {
         guard CMPedometer.isStepCountingAvailable() else {
@@ -116,10 +129,10 @@ final class StepsManager {
         return streak
     }
 
-    // MARK: - Mini Chart (Hourly mock – safe)
+    // MARK: - Mini Chart (9 bars – safe & smooth)
     func fetchHourlySteps(completion: @escaping ([Int]) -> Void) {
         guard CMPedometer.isStepCountingAvailable() else {
-            completion([])
+            completion(Array(repeating: 0, count: 9))
             return
         }
 
@@ -130,10 +143,16 @@ final class StepsManager {
             DispatchQueue.main.async {
                 let totalSteps = data?.numberOfSteps.intValue ?? 0
 
-                // Sadə vizual mock (6 bar)
-                let buckets = 6
+                let buckets = 9
                 let perBucket = totalSteps / buckets
-                completion(Array(repeating: perBucket, count: buckets))
+                let remainder = totalSteps % buckets
+
+                var values = Array(repeating: perBucket, count: buckets)
+                if remainder > 0 {
+                    values[buckets - 1] += remainder
+                }
+
+                completion(values)
             }
         }
     }
