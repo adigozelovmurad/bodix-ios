@@ -76,5 +76,14 @@ final class CircularProgressView: UIView {
 
     func setColor(_ color: UIColor) {
         progressLayer.strokeColor = color.cgColor
+
     }
+
+    func applyGlow(color: UIColor) {
+        layer.shadowColor = color.cgColor
+        layer.shadowRadius = 6
+        layer.shadowOpacity = 0.4
+        layer.shadowOffset = .zero
+    }
+
 }

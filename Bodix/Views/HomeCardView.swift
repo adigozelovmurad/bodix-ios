@@ -22,6 +22,14 @@ final class HomeCardView: UIControl {
     private let valueLabel = UILabel()
     private let progressView = CircularProgressView()
     private let miniChartView = HomeMiniChartView()
+    private let skeleton = SkeletonView()
+    private var didCelebrateGoal = false
+    private var isExpanded = false
+    private var originalHeight: CGFloat = 100
+
+
+    
+
 
     // MARK: - Init
     init(
@@ -40,10 +48,30 @@ final class HomeCardView: UIControl {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private func playGoalCompletionAnimation() {
+        // 🌟 Green glow
+        layer.shadowColor = UIColor.systemGreen.cgColor
+        layer.shadowRadius = 0
+        layer.shadowOpacity = 0
+        layer.shadowOffset = .zero
+
+        UIView.animate(withDuration: 0.25, animations: {
+            self.layer.shadowRadius = 18
+            self.layer.shadowOpacity = 0.45
+            self.transform = CGAffineTransform(scaleX: 1.04, y: 1.04)
+        }) { _ in
+            UIView.animate(withDuration: 0.25) {
+                self.transform = .identity
+            }
+        }
+    }
+
+
     // MARK: - UI
     private func setupUI() {
         backgroundColor = .secondarySystemBackground
         layer.cornerRadius = 16
+        clipsToBounds = true
 
         addTarget(self, action: #selector(touchDown), for: [.touchDown, .touchDragEnter])
         addTarget(self, action: #selector(touchUp), for: [.touchUpInside, .touchDragExit, .touchCancel])
@@ -62,7 +90,15 @@ final class HomeCardView: UIControl {
 
         miniChartView.isHidden = cardType != .steps
 
-        [iconView, titleLabel, subtitleLabel, valueLabel, progressView, miniChartView].forEach {
+        [
+            iconView,
+            titleLabel,
+            subtitleLabel,
+            valueLabel,
+            progressView,
+            miniChartView,
+            skeleton
+        ].forEach {
             addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -91,7 +127,12 @@ final class HomeCardView: UIControl {
             miniChartView.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             miniChartView.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 8),
             miniChartView.trailingAnchor.constraint(equalTo: valueLabel.leadingAnchor, constant: -12),
-            miniChartView.heightAnchor.constraint(equalToConstant: 32)
+            miniChartView.heightAnchor.constraint(equalToConstant: 32),
+
+            skeleton.topAnchor.constraint(equalTo: topAnchor),
+            skeleton.leadingAnchor.constraint(equalTo: leadingAnchor),
+            skeleton.trailingAnchor.constraint(equalTo: trailingAnchor),
+            skeleton.bottomAnchor.constraint(equalTo: bottomAnchor)
         ])
     }
 
@@ -103,31 +144,92 @@ final class HomeCardView: UIControl {
 
     // MARK: - Public API
 
-    /// 🔵 Circle + number
+    /// 🔵 Circle + value
     func updateSteps(current: Int, goal: Int) {
         valueLabel.text = "\(current)"
 
         let progress = min(Double(current) / Double(goal), 1.0)
+        let c = color(for: progress)
         progressView.setProgress(progress, animated: true)
-        progressView.setColor(color(for: progress))
+
+        let color = color(for: progress)
+        progressView.setColor(c)
+        progressView.applyGlow(color: c)
+
+        // 🎉 Goal completed
+        if progress >= 1, !didCelebrateGoal {
+            didCelebrateGoal = true
+            playGoalCompletionAnimation()
+        }
+
+        // Reset (sabah üçün)
+        if progress < 1 {
+            didCelebrateGoal = false
+        }
     }
 
+
     /// 📊 Mini chart (Steps card only)
-    
-    func updateChart(values: [Int], progress: Double) {
+   
+    func updateChart(
+        today: [Int],
+        yesterday: [Int],
+        progress: Double
+    ) {
         guard cardType == .steps else { return }
 
         let color = color(for: progress)
 
         miniChartView.update(
-            values: values,
+            today: today,
+            yesterday: yesterday,
             progress: progress,
             color: color
         )
     }
 
+    func toggleExpand() {
+        guard cardType == .steps else { return }
+
+        isExpanded.toggle()
+        let scale: CGFloat = isExpanded ? 1.03 : 1.0
+
+        UIView.animate(
+            withDuration: 0.35,
+            delay: 0,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.4,
+            options: [.curveEaseInOut]
+        ) {
+            self.transform = CGAffineTransform(scaleX: scale, y: scale)
+            self.layoutIfNeeded()
+        }
+    }
+
+
+    
+
+
+
+
+
     func updateSubtitle(_ text: String) {
         subtitleLabel.text = text
+    }
+
+    // MARK: - Skeleton
+    func showSkeleton() {
+        skeleton.alpha = 1
+        skeleton.isHidden = false
+        bringSubviewToFront(skeleton)
+    }
+
+    func hideSkeleton() {
+        UIView.animate(withDuration: 0.25) {
+            self.skeleton.alpha = 0
+        } completion: { _ in
+            self.skeleton.stop()
+        }
     }
 
     // MARK: - Helpers

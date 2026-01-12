@@ -129,31 +129,53 @@ final class StepsManager {
         return streak
     }
 
-    // MARK: - Mini Chart (9 bars – safe & smooth)
+   
+    // MARK: - Mini Chart (12 bars - hər 2 saat)
     func fetchHourlySteps(completion: @escaping ([Int]) -> Void) {
         guard CMPedometer.isStepCountingAvailable() else {
-            completion(Array(repeating: 0, count: 9))
+            completion(Array(repeating: 0, count: 12))
             return
         }
 
         let calendar = Calendar.current
-        let start = calendar.startOfDay(for: Date())
+        let now = Date()
+        let startOfDay = calendar.startOfDay(for: now)
 
-        pedometer.queryPedometerData(from: start, to: Date()) { data, _ in
-            DispatchQueue.main.async {
-                let totalSteps = data?.numberOfSteps.intValue ?? 0
+        var hourlyData: [Int] = Array(repeating: 0, count: 12)
+        let group = DispatchGroup()
 
-                let buckets = 9
-                let perBucket = totalSteps / buckets
-                let remainder = totalSteps % buckets
+        // Hər 2 saatlıq interval üçün data fetch et
+        for i in 0..<12 {
+            group.enter()
 
-                var values = Array(repeating: perBucket, count: buckets)
-                if remainder > 0 {
-                    values[buckets - 1] += remainder
-                }
+            let startHour = i * 2
+            let endHour = startHour + 2
 
-                completion(values)
+            guard let start = calendar.date(byAdding: .hour, value: startHour, to: startOfDay),
+                  let end = calendar.date(byAdding: .hour, value: endHour, to: startOfDay)
+            else {
+                group.leave()
+                continue
+            }
+
+            // Gələcək saatları fetch etmə
+            if start > now {
+                hourlyData[i] = 0
+                group.leave()
+                continue
+            }
+
+            let queryEnd = min(end, now)
+
+            pedometer.queryPedometerData(from: start, to: queryEnd) { data, _ in
+                hourlyData[i] = data?.numberOfSteps.intValue ?? 0
+                group.leave()
             }
         }
+
+        group.notify(queue: .main) {
+            completion(hourlyData)
+        }
     }
-}
+    }
+

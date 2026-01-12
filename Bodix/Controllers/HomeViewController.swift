@@ -58,6 +58,9 @@ final class HomeViewController: UIViewController {
         type: .steps
     )
 
+    // 🔥 Steps card height (expand üçün)
+    private var stepsCardHeightConstraint: NSLayoutConstraint!
+
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -67,6 +70,10 @@ final class HomeViewController: UIViewController {
         setupLayout()
         setupActions()
         observeGoalChanges()
+
+        workoutCard.showSkeleton()
+        timerCard.showSkeleton()
+        stepsCard.showSkeleton()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -79,14 +86,12 @@ final class HomeViewController: UIViewController {
         Task {
             let goal = StepsManager.shared.dailyGoal
 
-            // ✅ Parallel fetch - daha sürətli
             async let todaySteps = fetchTodayStepsAsync()
             async let hourlyValues = fetchHourlyStepsAsync()
             async let yesterdaySteps = fetchYesterdayStepsAsync()
 
             let (today, hourly, yesterday) = await (todaySteps, hourlyValues, yesterdaySteps)
 
-            // ✅ Main thread-də UI update
             await updateUI(
                 todaySteps: today,
                 goal: goal,
@@ -111,65 +116,69 @@ final class HomeViewController: UIViewController {
         // 🔹 Progress
         let progress = min(Double(todaySteps) / Double(goal), 1.0)
 
+        if progress > 0.9 {
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        } else if progress > 0.7 {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+
+
         // 🔵 Circle
         stepsCard.updateSteps(current: todaySteps, goal: goal)
 
-        // 🎨 Circle ilə EYNİ chart rəngi
-//        let chartColor: UIColor =
-//            progress >= 1 ? .systemGreen :
-//            progress > 0.7 ? .systemOrange :
-//            .systemBlue
-
-        // 📊 Mini chart (ARTIQ progress YOX)
+        // 📊 Mini chart
         stepsCard.updateChart(
-            values: hourlyValues,
+            today: hourlyValues,
+            yesterday: makeYesterdayMock(from: hourlyValues),
             progress: progress
         )
-
 
         // 🔥 Yesterday + streak
         let diff = todaySteps - yesterdaySteps
         let sign = diff >= 0 ? "+" : ""
         let diffText = "\(sign)\(diff) vs yesterday"
 
-        let streak = StepsManager.shared.updateStreakIfNeeded(
-            todaySteps: todaySteps
-        )
+        let streak = StepsManager.shared.updateStreakIfNeeded(todaySteps: todaySteps)
 
         if streak > 0 {
-            stepsCard.updateSubtitle(
-                "Today • \(diffText) • 🔥 \(streak)d"
-            )
+            stepsCard.updateSubtitle("Today • \(diffText) • 🔥 \(streak)d")
         } else {
-            stepsCard.updateSubtitle(
-                "Today • \(diffText)"
-            )
+            stepsCard.updateSubtitle("Today • \(diffText)")
         }
-    }
 
+        workoutCard.hideSkeleton()
+        timerCard.hideSkeleton()
+        stepsCard.hideSkeleton()
+    }
 
     // MARK: - Async Helpers
     private func fetchTodayStepsAsync() async -> Int {
         await withCheckedContinuation { continuation in
-            StepsManager.shared.fetchTodaySteps { steps in
-                continuation.resume(returning: steps)
+            StepsManager.shared.fetchTodaySteps {
+                continuation.resume(returning: $0)
             }
         }
     }
 
     private func fetchHourlyStepsAsync() async -> [Int] {
         await withCheckedContinuation { continuation in
-            StepsManager.shared.fetchHourlySteps { values in
-                continuation.resume(returning: values)
+            StepsManager.shared.fetchHourlySteps {
+                continuation.resume(returning: $0)
             }
         }
     }
 
     private func fetchYesterdayStepsAsync() async -> Int {
         await withCheckedContinuation { continuation in
-            StepsManager.shared.fetchYesterdaySteps { steps in
-                continuation.resume(returning: steps)
+            StepsManager.shared.fetchYesterdaySteps {
+                continuation.resume(returning: $0)
             }
+        }
+    }
+
+    private func makeYesterdayMock(from today: [Int]) -> [Int] {
+        today.map {
+            max(0, Int(Double($0) * Double.random(in: 0.7...0.95)))
         }
     }
 
@@ -208,6 +217,8 @@ final class HomeViewController: UIViewController {
         contentView.translatesAutoresizingMaskIntoConstraints = false
         [titleLabel, dateLabel, greetingLabel, statsStack, workoutCard, timerCard, stepsCard]
             .forEach { $0.translatesAutoresizingMaskIntoConstraints = false }
+
+        stepsCardHeightConstraint = stepsCard.heightAnchor.constraint(equalToConstant: 100)
 
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
@@ -248,7 +259,7 @@ final class HomeViewController: UIViewController {
             stepsCard.topAnchor.constraint(equalTo: timerCard.bottomAnchor, constant: 16),
             stepsCard.leadingAnchor.constraint(equalTo: workoutCard.leadingAnchor),
             stepsCard.trailingAnchor.constraint(equalTo: workoutCard.trailingAnchor),
-            stepsCard.heightAnchor.constraint(equalToConstant: 100),
+            stepsCardHeightConstraint,
             stepsCard.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -24)
         ])
     }
@@ -260,16 +271,32 @@ final class HomeViewController: UIViewController {
     }
 
     @objc private func openSteps() {
-        stepsCard.isUserInteractionEnabled = false
+        let collapsedHeight: CGFloat = 100
+        let expandedHeight: CGFloat = 160
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            let vc = StepsViewController()
-            vc.hidesBottomBarWhenPushed = true
-            self.navigationController?.pushViewController(vc, animated: true)
-            self.stepsCard.isUserInteractionEnabled = true
+        let isExpanded = stepsCardHeightConstraint.constant > collapsedHeight
+        stepsCardHeightConstraint.constant = isExpanded ? collapsedHeight : expandedHeight
+
+        UIView.animate(
+            withDuration: 0.35,
+            delay: 0,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.4,
+            options: [.curveEaseInOut]
+        ) {
+            self.view.layoutIfNeeded()
+            self.stepsCard.toggleExpand()
+        }
+
+        // 2-ci tap → detail
+        if isExpanded {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                let vc = StepsViewController()
+                vc.hidesBottomBarWhenPushed = true
+                self.navigationController?.pushViewController(vc, animated: true)
+            }
         }
     }
-
 
     @objc private func openTimer() {
         tabBarController?.selectedIndex = 1
