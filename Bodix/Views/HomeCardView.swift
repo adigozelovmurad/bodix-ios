@@ -15,7 +15,7 @@ enum HomeCardType {
 final class HomeCardView: UIControl {
 
     private let cardType: HomeCardType
-
+    private var brandColor: UIColor = UIColor(named: "BrandPrimary") ?? .systemBlue
     private let iconView = UIImageView()
     private let titleLabel = UILabel()
     private let subtitleLabel = UILabel()
@@ -76,7 +76,7 @@ final class HomeCardView: UIControl {
         addTarget(self, action: #selector(touchDown), for: [.touchDown, .touchDragEnter])
         addTarget(self, action: #selector(touchUp), for: [.touchUpInside, .touchDragExit, .touchCancel])
 
-        iconView.tintColor = .label
+        iconView.tintColor = brandColor
         iconView.contentMode = .scaleAspectFit
 
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -160,6 +160,9 @@ final class HomeCardView: UIControl {
         if progress >= 1, !didCelebrateGoal {
             didCelebrateGoal = true
             playGoalCompletionAnimation()
+            HapticManager.shared.success()
+
+
         }
 
         // Reset (sabah üçün)
@@ -167,6 +170,13 @@ final class HomeCardView: UIControl {
             didCelebrateGoal = false
         }
     }
+
+    func setAccentColor(_ color: UIColor) {
+        self.brandColor = color
+        iconView.tintColor = color
+        progressView.setColor(color)
+    }
+
 
 
     /// 📊 Mini chart (Steps card only)
@@ -207,11 +217,6 @@ final class HomeCardView: UIControl {
     }
 
 
-    
-
-
-
-
 
     func updateSubtitle(_ text: String) {
         subtitleLabel.text = text
@@ -239,9 +244,10 @@ final class HomeCardView: UIControl {
         } else if progress > 0.7 {
             return .systemOrange
         } else {
-            return .systemBlue
+            return brandColor
         }
     }
+
 
     // MARK: - Touch
     @objc private func touchDown() {

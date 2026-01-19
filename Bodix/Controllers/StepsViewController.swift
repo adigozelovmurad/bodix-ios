@@ -34,12 +34,27 @@ final class StepsViewController: UIViewController {
     // MARK: - Motion
     private let pedometer = CMPedometer()
     private var stepsData = StepsData()
+    private let weeklyChartView = WeeklyStepsChartView()
+    private let permissionView = StepsPermissionView()
+    private var presentedDayVC: DayDetailsViewController?
+    private var isPedometerRunning = false
+    private var didStartPedometer = false
+    private var didReturnFromSettings = false
+    private var didHandlePermissionOnce = false
+    private var shouldShowPermissionUI = true
+    
+
 
     // MARK: - UI
     private let scrollView = UIScrollView()
     private let contentView = UIView()
 
     private let circularProgressView = CircularProgressView()
+
+    private var brandColor: UIColor {
+        UIColor(named: "BrandPrimary") ?? .systemBlue
+    }
+
 
     private let stepsLabel: UILabel = {
         let l = UILabel()
@@ -69,25 +84,29 @@ final class StepsViewController: UIViewController {
     }()
 
     // Stats Cards
-    private let distanceCard = StatsCardView(
+    private lazy var distanceCard = StatsCardView(
         icon: "figure.walk",
         title: "Distance",
         value: "0.0",
-        unit: "km"
+        unit: "km",
+        color: brandColor
     )
 
-    private let caloriesCard = StatsCardView(
+
+    private lazy var caloriesCard = StatsCardView(
         icon: "flame.fill",
         title: "Calories",
         value: "0",
-        unit: "kcal"
+        unit: "kcal",
+        color: brandColor
     )
 
-    private let goalCard = StatsCardView(
+    private lazy var goalCard = StatsCardView(
         icon: "target",
         title: "Goal",
         value: "10,000",
-        unit: "steps"
+        unit: "steps",
+        color: brandColor
     )
 
     private let editGoalButton: UIButton = {
@@ -99,6 +118,38 @@ final class StepsViewController: UIViewController {
         return UIButton(configuration: config)
     }()
 
+    private let weeklySummaryTitle: UILabel = {
+        let l = UILabel()
+        l.text = "This Week"
+        l.font = .systemFont(ofSize: 18, weight: .bold)
+        return l
+    }()
+
+    private lazy var weeklyStepsCard = StatsCardView(
+        icon: "figure.walk",
+        title: "Steps",
+        value: "0",
+        unit: "",
+        color: .systemBlue
+    )
+
+    private lazy var weeklyDistanceCard = StatsCardView(
+        icon: "location.fill",
+        title: "Distance",
+        value: "0.0",
+        unit: "km",
+        color: .systemIndigo
+    )
+
+    private lazy var weeklyCaloriesCard = StatsCardView(
+        icon: "flame.fill",
+        title: "Calories",
+        value: "0",
+        unit: "kcal",
+        color: .systemOrange
+    )
+
+
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -106,46 +157,229 @@ final class StepsViewController: UIViewController {
         setupLayout()
         loadSavedGoal()
         observeGoalChanges()
+        loadWeeklySteps()
+
+
+
+
+        weeklyChartView.onDaySelected = { [weak self] day in
+            self?.showDayDetails(day)
+        }
+
+
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
 
-        // 🔥 Donmanı önləyən əsas hissə
-        DispatchQueue.global(qos: .userInitiated).async {
-            guard CMPedometer.isStepCountingAvailable() else { return }
+        print("📐 chart frame:", weeklyChartView.frame)
 
-            let start = Calendar.current.startOfDay(for: Date())
-
-            self.pedometer.queryPedometerData(from: start, to: Date()) { [weak self] data, _ in
-                DispatchQueue.main.async {
-                    self?.updateStepsData(with: data)
-                }
-            }
-
-            self.pedometer.startUpdates(from: start) { [weak self] data, _ in
-                DispatchQueue.main.async {
-                    self?.updateStepsData(with: data)
-                }
+        if didReturnFromSettings {
+            // ✅ Settings-dən qayıdanda dərhal check et
+            handlePermissionStateOnAppear()
+        } else {
+            // ✅ İlk açılışda 0.5s gözlə
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.handlePermissionStateOnAppear()
             }
         }
     }
 
+
+    private func handlePermissionStateOnAppear() {
+        let status = CMPedometer.authorizationStatus()
+
+        // ✅ Flag-ı dərhal reset et
+        let wasReturningFromSettings = didReturnFromSettings
+        didReturnFromSettings = false
+
+        switch status {
+
+        case .authorized:
+            shouldShowPermissionUI = false
+
+            if permissionView.superview != nil {
+                permissionView.removeFromSuperview()
+            }
+
+            if !didStartPedometer {
+                didStartPedometer = true
+                startPedometer()
+            }
+
+        case .notDetermined:
+            showPermissionView()
+
+        case .denied, .restricted:
+            showPermissionView(openSettings: true)
+
+        @unknown default:
+            break
+        }
+    }
+
+    // StepsViewController.swift-də showDayDetails metodunu bu kod ilə əvəz edin:
+
+    private func showDayDetails(_ day: DaySteps) {
+
+        let isToday = Calendar.current.isDateInToday(day.date)
+
+        let finalDay: DaySteps
+
+        if isToday {
+            // 🔴 Əgər Today-dirsə → həmişə live data göstər
+            finalDay = DaySteps(
+                date: Date(),
+                steps: stepsData.steps,
+                distance: stepsData.distance,
+                calories: stepsData.calories
+            )
+        } else {
+            finalDay = day
+        }
+
+        // Əgər artıq açıq sheet varsa → yalnız update et
+        if let existingVC = presentedDayVC {
+            existingVC.update(day: finalDay)
+            return
+        }
+
+        let vc = DayDetailsViewController(day: finalDay)
+        presentedDayVC = vc
+
+        vc.modalPresentationStyle = .pageSheet
+        vc.presentationController?.delegate = self
+
+        if let sheet = vc.sheetPresentationController {
+            let smallId = UISheetPresentationController.Detent.Identifier("small")
+
+            sheet.detents = [
+                .custom(identifier: smallId) { _ in 200 },
+                .medium()
+            ]
+
+            sheet.selectedDetentIdentifier = smallId
+            sheet.prefersGrabberVisible = true
+            sheet.largestUndimmedDetentIdentifier = .medium
+            sheet.preferredCornerRadius = 20
+            sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+        }
+
+        present(vc, animated: true)
+    }
+
+
+    private func calculateWeeklySummary(from data: [DaySteps]) -> (steps: Int, distance: Double, calories: Double) {
+        let totalSteps = data.reduce(0) { $0 + $1.steps }
+        let totalDistance = data.reduce(0) { $0 + $1.distance }
+        let totalCalories = data.reduce(0) { $0 + $1.calories }
+        return (totalSteps, totalDistance, totalCalories)
+    }
+
+
+
+
+    
+
+    private func startPedometer() {
+        print("🔵 startPedometer called - isPedometerRunning: \(isPedometerRunning), didStartPedometer: \(didStartPedometer)")
+
+        guard !isPedometerRunning else {
+            print("⚠️ Pedometer ALREADY running!")
+            return
+        }
+
+        guard CMPedometer.authorizationStatus() == .authorized else {
+            print("⚠️ Not authorized!")
+            return
+        }
+
+        print("✅ Starting pedometer...")
+        isPedometerRunning = true
+        didStartPedometer = true
+
+        let start = Calendar.current.startOfDay(for: Date())
+
+        pedometer.queryPedometerData(from: start, to: Date()) { [weak self] data, error in
+            if let error = error {
+                print("❌ Query error: \(error)")
+            }
+            DispatchQueue.main.async {
+                self?.updateStepsData(with: data)
+            }
+        }
+
+        pedometer.startUpdates(from: start) { [weak self] data, error in
+            if let error = error {
+                print("❌ Update error: \(error)")
+            }
+            DispatchQueue.main.async {
+                self?.updateStepsData(with: data)
+            }
+        }
+    }
+
+
     deinit {
         pedometer.stopUpdates()
+        isPedometerRunning = false
     }
 
     // MARK: - Setup
     private func setupUI() {
         title = "Steps"
         view.backgroundColor = .systemBackground
+        stepsLabel.textColor = .label
+        goalLabel.textColor = .secondaryLabel
         navigationController?.navigationBar.prefersLargeTitles = true
+        circularProgressView.tintColor = UIColor(named: "BrandPrimary")
         editGoalButton.addTarget(self, action: #selector(editGoalTapped), for: .touchUpInside)
     }
+
+
+
+    private func showPermissionView(openSettings: Bool = false) {
+        guard shouldShowPermissionUI else { return }
+
+        if permissionView.superview == nil {
+            view.addSubview(permissionView)
+            permissionView.frame = view.bounds
+        }
+
+        permissionView.button.removeTarget(nil, action: nil, for: .allEvents)
+
+        permissionView.button.addAction(
+            UIAction { [weak self] _ in
+                guard let self else { return }
+
+                if openSettings {
+                    self.openSettingsWithConfirmation()
+                } else {
+                    self.requestInitialPermission()
+                }
+            },
+            for: .touchUpInside
+        )
+    }
+
+
+
+    private func requestInitialPermission() {
+        CMPedometer().queryPedometerData(
+            from: Date(),
+            to: Date()
+        ) { _, _ in
+            // iOS özü permission alert göstərir
+        }
+    }
+
+
 
     private func setupLayout() {
         view.addSubview(scrollView)
         scrollView.addSubview(contentView)
+        view.bringSubviewToFront(weeklyChartView)
+
 
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         contentView.translatesAutoresizingMaskIntoConstraints = false
@@ -160,11 +394,23 @@ final class StepsViewController: UIViewController {
             caloriesCard,
             goalCard
         ])
+
+        let weeklySummaryStack = UIStackView(arrangedSubviews: [
+            weeklyStepsCard,
+            weeklyDistanceCard,
+            weeklyCaloriesCard
+        ])
+
+        weeklySummaryStack.axis = .horizontal
+        weeklySummaryStack.spacing = 12
+        weeklySummaryStack.distribution = .fillEqually
+        weeklySummaryStack.translatesAutoresizingMaskIntoConstraints = false
+
         statsStack.axis = .horizontal
         statsStack.spacing = 12
         statsStack.distribution = .fillEqually
 
-        [progressContainer, motivationLabel, statsStack, editGoalButton].forEach {
+        [progressContainer, motivationLabel, statsStack, editGoalButton,weeklyChartView,weeklySummaryTitle,weeklySummaryStack].forEach {
             contentView.addSubview($0)
             $0.translatesAutoresizingMaskIntoConstraints = false
         }
@@ -212,8 +458,28 @@ final class StepsViewController: UIViewController {
 
             editGoalButton.topAnchor.constraint(equalTo: statsStack.bottomAnchor, constant: 24),
             editGoalButton.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            editGoalButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40)
+          //  editGoalButton.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40),
+
+            weeklyChartView.topAnchor.constraint(equalTo: editGoalButton.bottomAnchor, constant: 24),
+            weeklyChartView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            weeklyChartView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            weeklyChartView.heightAnchor.constraint(equalToConstant: 180),
+           // weeklyChartView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40),
+
+            weeklySummaryTitle.topAnchor.constraint(equalTo: weeklyChartView.bottomAnchor, constant: 24),
+            weeklySummaryTitle.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            weeklySummaryTitle.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+
+            weeklySummaryStack.topAnchor.constraint(equalTo: weeklySummaryTitle.bottomAnchor, constant: 12),
+            weeklySummaryStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
+            weeklySummaryStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
+            weeklySummaryStack.heightAnchor.constraint(equalToConstant: 100),
+
+            weeklySummaryStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -40)
+
         ])
+
+        
     }
 
     // MARK: - Data
@@ -226,15 +492,38 @@ final class StepsViewController: UIViewController {
         updateUI()
     }
 
+    private func loadWeeklySteps() {
+        StepsManager.shared.fetchWeeklySteps { [weak self] data in
+            guard let self else { return }
+
+            self.weeklyChartView.update(
+                data: data,
+                goal: StepsManager.shared.dailyGoal,
+                brandColor: brandColor
+            )
+
+            let summary = self.calculateWeeklySummary(from: data)
+
+            self.weeklyStepsCard.updateValue(formatNumber(summary.steps))
+            self.weeklyDistanceCard.updateValue(String(format: "%.1f", summary.distance / 1000))
+            self.weeklyCaloriesCard.updateValue(String(format: "%.0f", summary.calories))
+        }
+    }
+
+
+
     private func updateUI() {
         stepsLabel.text = formatNumber(stepsData.steps)
         goalLabel.text = "of \(formatNumber(stepsData.goalSteps)) steps"
 
         circularProgressView.setProgress(stepsData.goalProgress, animated: true)
 
+        let brandColor = UIColor(named: "BrandPrimary") ?? .systemBlue
+
         let color: UIColor =
             stepsData.goalProgress >= 1 ? .systemGreen :
-            stepsData.goalProgress > 0.7 ? .systemOrange : .systemBlue
+            stepsData.goalProgress > 0.7 ? .systemOrange :
+            brandColor
 
         circularProgressView.setColor(color)
         motivationLabel.textColor = color
@@ -242,6 +531,25 @@ final class StepsViewController: UIViewController {
         distanceCard.updateValue(String(format: "%.2f", stepsData.distanceKm))
         caloriesCard.updateValue(String(format: "%.0f", stepsData.calories))
         goalCard.updateValue(formatNumber(stepsData.goalSteps))
+
+        
+        // 🔄 Əgər açıq sheet varsa və bu GÜN göstərilirsə, onu canlı yenilə
+        if let dayVC = presentedDayVC {
+            let today = Calendar.current.startOfDay(for: Date())
+            let selectedDay = Calendar.current.startOfDay(for: dayVC.day.date)
+
+            if today == selectedDay {
+                let liveDay = DaySteps(
+                    date: Date(),
+                    steps: stepsData.steps,
+                    distance: stepsData.distance,
+                    calories: stepsData.calories
+                )
+                dayVC.update(day: liveDay)
+            }
+        }
+
+
     }
 
     // MARK: - Goal
@@ -291,6 +599,11 @@ final class StepsViewController: UIViewController {
             // 🔹 Single source of truth
             StepsManager.shared.dailyGoal = goal
 
+            NotificationCenter.default.post(
+                name: StepsManager.goalDidChangeNotification,
+                object: nil
+            )
+
             // 🔹 Haptic feedback
             let impact = UIImpactFeedbackGenerator(style: .medium)
             impact.impactOccurred()
@@ -301,9 +614,43 @@ final class StepsViewController: UIViewController {
 
 
     // MARK: - Helpers
+
+
+    private func openSettingsWithConfirmation() {
+        let alert = UIAlertController(
+            title: "Permission Required",
+            message: "To track your steps, please allow Motion access in Settings.",
+            preferredStyle: .alert
+        )
+
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+
+        alert.addAction(UIAlertAction(title: "Open Settings", style: .default) { _ in
+            self.didReturnFromSettings = true
+
+            if let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        })
+
+
+        present(alert, animated: true)
+    }
+
+
     private func formatNumber(_ n: Int) -> String {
         let f = NumberFormatter()
         f.numberStyle = .decimal
         return f.string(from: NSNumber(value: n)) ?? "\(n)"
     }
+
 }
+
+
+extension StepsViewController: UIAdaptivePresentationControllerDelegate {
+    func presentationControllerDidDismiss(_ presentationController: UIPresentationController) {
+        weeklyChartView.resetFocus()
+        presentedDayVC = nil // 🔥 BU VACİBDİR
+    }
+}
+

@@ -13,6 +13,10 @@ final class MainTabBarController: UITabBarController {
         super.viewDidLoad()
         setupTabs()
         setupAppearance()
+
+        
+
+        
     }
 
     private func setupTabs() {
@@ -20,6 +24,15 @@ final class MainTabBarController: UITabBarController {
         let workout = WorkoutViewController()
         let steps = StepsViewController()
         let settings = SettingsViewController()
+
+        settings.tabBarItem = UITabBarItem(
+            title: "Settings",
+            image: UIImage(systemName: "gearshape"),
+            selectedImage: UIImage(systemName: "gearshape.fill")
+        )
+
+
+        
 
         home.tabBarItem = UITabBarItem(title: "Home", image: UIImage(systemName: "house"), tag: 0)
         workout.tabBarItem = UITabBarItem(title: "Workout", image: UIImage(systemName: "dumbbell"), tag: 1)
@@ -35,7 +48,11 @@ final class MainTabBarController: UITabBarController {
     }
 
     private func setupAppearance() {
-        tabBar.tintColor = .systemBlue
+        tabBar.tintColor = UIColor(named: "BrandPrimary")
+        tabBar.unselectedItemTintColor = .systemGray
         tabBar.backgroundColor = .systemBackground
+
+        
     }
+
 }

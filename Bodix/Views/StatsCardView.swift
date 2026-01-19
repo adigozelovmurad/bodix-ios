@@ -11,7 +11,6 @@ final class StatsCardView: UIView {
 
     private let iconView: UIImageView = {
         let iv = UIImageView()
-        iv.tintColor = .systemBlue
         iv.contentMode = .scaleAspectFit
         return iv
     }()
@@ -42,9 +41,10 @@ final class StatsCardView: UIView {
     }()
 
     // MARK: - Init
-    init(icon: String, title: String, value: String, unit: String) {
+    init(icon: String, title: String, value: String, unit: String, color: UIColor) {
         super.init(frame: .zero)
         iconView.image = UIImage(systemName: icon)
+        iconView.tintColor = color
         titleLabel.text = title
         valueLabel.text = value
         unitLabel.text = unit

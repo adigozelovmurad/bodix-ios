@@ -55,8 +55,8 @@ final class HomeMiniChartView: UIView {
             stackView.topAnchor.constraint(equalTo: topAnchor),
             stackView.bottomAnchor.constraint(equalTo: bottomAnchor),
             stackView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stackView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stackView.heightAnchor.constraint(equalToConstant: Constants.maxBarHeight)
+            stackView.trailingAnchor.constraint(equalTo: trailingAnchor)
+
         ])
 
         for _ in 0..<Constants.barCount {
@@ -154,6 +154,20 @@ final class HomeMiniChartView: UIView {
         UIView.performWithoutAnimation {
             self.layoutIfNeeded()
         }
+
+        // 🔁 RESET previous animations (VERY IMPORTANT)
+        todayBars.forEach {
+            $0.layer.removeAllAnimations()
+            $0.transform = .identity
+            $0.alpha = 1
+        }
+
+        yesterdayBars.forEach {
+            $0.layer.removeAllAnimations()
+            $0.transform = .identity
+            $0.alpha = 1
+        }
+
 
         guard today.count == Constants.barCount,
               yesterday.count == Constants.barCount else {
