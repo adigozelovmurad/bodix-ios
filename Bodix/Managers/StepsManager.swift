@@ -23,6 +23,8 @@ final class StepsManager {
 
     private let pedometer = CMPedometer()
     private let defaults = UserDefaults.standard
+    private let caloriesPerStep: Double = 0.04
+
 
     var wasGoalJustUpdated: Bool = false
     var goalChangeType: GoalChangeType?
@@ -59,12 +61,25 @@ final class StepsManager {
         }
     }
 
+    func fetchTodaySteps(completion: @escaping (Int) -> Void) {
+        fetchTodayStats { steps, _, _ in
+            completion(steps)
+        }
+    }
+
+    func calculateCalories(from steps: Int) -> Double {
+        Double(steps) * caloriesPerStep
+    }
+
+
 
     func fetchWeeklySteps(completion: @escaping ([DaySteps]) -> Void) {
         guard CMPedometer.isStepCountingAvailable() else {
             completion([])
             return
         }
+
+
 
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
@@ -86,7 +101,8 @@ final class StepsManager {
             pedometer.queryPedometerData(from: start, to: end) { data, _ in
                 let steps = data?.numberOfSteps.intValue ?? 0
                 let distance = data?.distance?.doubleValue ?? 0
-                let calories = Double(steps) * 0.04
+                let calories = self.calculateCalories(from: steps) 
+
 
                 results.append(
                     DaySteps(
@@ -122,20 +138,28 @@ final class StepsManager {
         }
 
         // MARK: - Today Steps
-        func fetchTodaySteps(completion: @escaping (Int) -> Void) {
-            guard CMPedometer.isStepCountingAvailable() else {
-                completion(0)
+    func fetchTodayStats(completion: @escaping (_ steps: Int, _ distance: Double, _ calories: Double) -> Void) {
+        let start = Calendar.current.startOfDay(for: Date())
+
+        pedometer.queryPedometerData(from: start, to: Date()) { data, error in
+            guard let data else {
+                DispatchQueue.main.async {
+                    completion(0, 0, 0)
+                }
                 return
             }
 
-            let start = Calendar.current.startOfDay(for: Date())
+            let steps = data.numberOfSteps.intValue
+            let distance = data.distance?.doubleValue ?? 0
+            let calories = self.calculateCalories(from: steps)
 
-            pedometer.queryPedometerData(from: start, to: Date()) { data, _ in
-                DispatchQueue.main.async {
-                    completion(data?.numberOfSteps.intValue ?? 0)
-                }
+            DispatchQueue.main.async {
+                completion(steps, distance, calories)
             }
         }
+    }
+
+
 
         // MARK: - Yesterday Steps
         func fetchYesterdaySteps(completion: @escaping (Int) -> Void) {

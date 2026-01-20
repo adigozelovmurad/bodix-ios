@@ -21,13 +21,7 @@ final class WeeklyStepsChartView: UIView {
     var onDaySelected: ((DaySteps) -> Void)?
     private var currentData: [DaySteps] = []
 
-    private let titleLabel: UILabel = {
-        let l = UILabel()
-        l.text = "Weekly Progress"
-        l.font = .systemFont(ofSize: 17, weight: .semibold)
-        l.textColor = .label
-        return l
-    }()
+
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -48,8 +42,6 @@ final class WeeklyStepsChartView: UIView {
 
         isUserInteractionEnabled = true
 
-        addSubview(titleLabel)
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
         let chartStack = UIStackView()
         chartStack.axis = .horizontal
@@ -62,10 +54,7 @@ final class WeeklyStepsChartView: UIView {
         chartStack.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-
-            chartStack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 20),
+            chartStack.topAnchor.constraint(equalTo: topAnchor, constant: 20),
             chartStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             chartStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             chartStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -20)
@@ -168,18 +157,15 @@ final class WeeklyStepsChartView: UIView {
 
             let fadedBrand = brandColor.withAlphaComponent(0.4)
 
-            var color: UIColor
+                       var color: UIColor
 
-            if isToday {
-                color = brandColor
-            } else {
-                color = fadedBrand
-            }
+                       if isToday {
+                           color = brandColor
+                       } else {
+                           color = fadedBrand
+                       }
 
-            if steps >= goal {
-                color = UIColor.systemGreen.withAlphaComponent(isToday ? 1.0 : 0.4)
-            }
-
+                       
 
 
             dayLabels[i].font = isToday ? .systemFont(ofSize: 13, weight: .bold) : .systemFont(ofSize: 13, weight: .medium)
@@ -239,8 +225,8 @@ final class WeeklyStepsChartView: UIView {
         }
 
         // Haptic feedback
-        let impact = UIImpactFeedbackGenerator(style: .light)
-        impact.impactOccurred()
+        HapticManager.shared.light()
+
 
         let selectedDay = currentData[index]
         onDaySelected?(selectedDay)

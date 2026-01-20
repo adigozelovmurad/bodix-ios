@@ -154,6 +154,7 @@ final class SettingsViewController: UITableViewController {
                 toggle.addAction(
                     UIAction { action in
                         let isOn = (action.sender as? UISwitch)?.isOn ?? true
+                        
                         HapticManager.shared.isEnabled = isOn
 
                         // yalnız ON ediləndə yüngül feedback
@@ -210,11 +211,6 @@ final class SettingsViewController: UITableViewController {
             else { return }
 
             StepsManager.shared.dailyGoal = goal
-
-            NotificationCenter.default.post(
-                name: StepsManager.goalDidChangeNotification,
-                object: nil
-            )
 
             HapticManager.shared.action()
 
