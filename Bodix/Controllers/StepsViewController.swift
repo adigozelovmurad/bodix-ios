@@ -165,6 +165,14 @@ final class StepsViewController: UIViewController {
         weeklyChartView.onDaySelected = { [weak self] day in
             self?.showDayDetails(day)
         }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(distanceUnitDidChange),
+            name: Notification.Name("DistanceUnitChanged"),
+            object: nil
+        )
+
+
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -227,9 +235,11 @@ final class StepsViewController: UIViewController {
                 date: Date(),
                 steps: stepsData.steps,
                 distance: stepsData.distance,
-                calories: StepsManager.shared.calculateCalories(from: stepsData.steps)
+                calories: stepsData.calories
 
-            )
+                )
+
+
         } else {
             finalDay = day
         }
@@ -471,7 +481,10 @@ final class StepsViewController: UIViewController {
 
         stepsData.steps = data.numberOfSteps.intValue
         stepsData.distance = data.distance?.doubleValue ?? 0
-        stepsData.calories = StepsManager.shared.calculateCalories(from: stepsData.steps)
+        stepsData.calories = StepsManager.shared.calculateCalories(
+            steps: stepsData.steps,
+            distance: stepsData.distance
+        )
 
         updateUI()
 
@@ -479,8 +492,9 @@ final class StepsViewController: UIViewController {
             date: Date(),
             steps: stepsData.steps,
             distance: stepsData.distance,
-            calories: StepsManager.shared.calculateCalories(from: stepsData.steps)
+            calories: stepsData.calories
         )
+
 
     }
 
@@ -490,13 +504,13 @@ final class StepsViewController: UIViewController {
 
             var updatedData = data
             if let todayIndex = updatedData.firstIndex(where: { Calendar.current.isDateInToday($0.date) }) {
-
+                
                 updatedData[todayIndex] = DaySteps(
                     date: Date(),
                     steps: self.stepsData.steps,
                     distance: self.stepsData.distance,
-                    calories: StepsManager.shared.calculateCalories(from: self.stepsData.steps)
-                )
+                    calories: self.stepsData.calories
+            )
 
             }
 
@@ -509,7 +523,12 @@ final class StepsViewController: UIViewController {
             let summary = self.calculateWeeklySummary(from: updatedData)
 
             self.weeklyStepsCard.updateValue(self.formatNumber(summary.steps))
-            self.weeklyDistanceCard.updateValue(String(format: "%.1f", summary.distance / 1000))
+            self.weeklyDistanceCard.updateValue(
+                StepsManager.shared.distanceUnit.format(
+                    distanceInMeters: summary.distance
+                )
+            )
+
             self.weeklyCaloriesCard.updateValue(String(format: "%.0f", summary.calories))
         }
     }
@@ -530,7 +549,12 @@ final class StepsViewController: UIViewController {
         circularProgressView.setColor(color)
         motivationLabel.textColor = color
 
-        distanceCard.updateValue(String(format: "%.2f", stepsData.distanceKm))
+        distanceCard.updateValue(
+            StepsManager.shared.distanceUnit.format(
+                distanceInMeters: stepsData.distance
+            )
+        )
+
         caloriesCard.updateValue(String(format: "%.0f", stepsData.calories))
         goalCard.updateValue(formatNumber(stepsData.goalSteps))
 
@@ -586,6 +610,12 @@ final class StepsViewController: UIViewController {
         stepsData.goalSteps = StepsManager.shared.dailyGoal
         updateUI()
     }
+
+    @objc private func distanceUnitDidChange() {
+        updateUI()
+        loadWeeklySteps()
+    }
+
 
     @objc private func editGoalTapped() {
         let alert = UIAlertController(

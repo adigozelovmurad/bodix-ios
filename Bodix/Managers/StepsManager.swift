@@ -23,7 +23,9 @@ final class StepsManager {
 
     private let pedometer = CMPedometer()
     private let defaults = UserDefaults.standard
-    private let caloriesPerStep: Double = 0.04
+
+
+
 
 
     var wasGoalJustUpdated: Bool = false
@@ -34,6 +36,8 @@ final class StepsManager {
     private let goalKey = "dailyStepsGoal"
     private let streakCountKey = "stepsStreakCount"
     private let lastStreakDateKey = "lastStreakDate"
+    private let weightKey = "userWeight"
+
 
     // MARK: - Notifications
     static let goalDidChangeNotification =
@@ -61,15 +65,46 @@ final class StepsManager {
         }
     }
 
+    var userWeight: Double {
+        get {
+            let saved = defaults.double(forKey: weightKey)
+            return saved == 0 ? 70 : saved   // default 70 kg
+        }
+        set {
+            defaults.set(newValue, forKey: weightKey)
+        }
+    }
+
+    private let distanceUnitKey = "distanceUnit"
+
+    var distanceUnit: DistanceUnit {
+        get {
+            let raw = defaults.string(forKey: distanceUnitKey)
+            return DistanceUnit(rawValue: raw ?? "km") ?? .km
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: distanceUnitKey)
+            NotificationCenter.default.post(
+                name: Notification.Name("DistanceUnitChanged"),
+                object: nil
+            )
+        }
+    }
+
+
+
     func fetchTodaySteps(completion: @escaping (Int) -> Void) {
         fetchTodayStats { steps, _, _ in
             completion(steps)
         }
     }
 
-    func calculateCalories(from steps: Int) -> Double {
-        Double(steps) * caloriesPerStep
+    func calculateCalories(steps: Int, distance: Double) -> Double {
+        let km = distance / 1000
+        let weight = userWeight
+        return km * weight * 0.9
     }
+
 
 
 
@@ -101,7 +136,11 @@ final class StepsManager {
             pedometer.queryPedometerData(from: start, to: end) { data, _ in
                 let steps = data?.numberOfSteps.intValue ?? 0
                 let distance = data?.distance?.doubleValue ?? 0
-                let calories = self.calculateCalories(from: steps) 
+                let calories = self.calculateCalories(
+                    steps: steps,
+                    distance: distance
+                )
+
 
 
                 results.append(
@@ -151,7 +190,10 @@ final class StepsManager {
 
             let steps = data.numberOfSteps.intValue
             let distance = data.distance?.doubleValue ?? 0
-            let calories = self.calculateCalories(from: steps)
+            let calories = self.calculateCalories(
+                steps: steps,
+                distance: distance
+            )
 
             DispatchQueue.main.async {
                 completion(steps, distance, calories)

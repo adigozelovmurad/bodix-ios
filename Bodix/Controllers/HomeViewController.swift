@@ -107,7 +107,7 @@ final class HomeViewController: UIViewController {
             // 🔹 Top stats
             self.stepsStat.update(value: "\(steps)")
             self.caloriesStat.update(value: "\(Int(round(calories))) kcal")
-            self.distanceStat.update(value: String(format: "%.2f km", distance / 1000))
+            self.distanceStat.update(value: StepsManager.shared.distanceUnit.format(distanceInMeters: distance))
             self.loadChartsAndProgress(todaySteps: steps, goal: goal)
         }
     }

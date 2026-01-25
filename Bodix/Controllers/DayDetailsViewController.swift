@@ -136,7 +136,7 @@ final class DayDetailsViewController: UIViewController {
     private func refreshUI() {
         titleLabel.text = formatter.string(from: day.date)
         stepsValueLabel.text = "\(day.steps)"
-        distanceValueLabel.text = String(format: "%.2f km", day.distance / 1000)
+        distanceValueLabel.text = StepsManager.shared.distanceUnit.format(distanceInMeters: day.distance)
         caloriesValueLabel.text = "\(Int(round(day.calories))) kcal"
 
     }
