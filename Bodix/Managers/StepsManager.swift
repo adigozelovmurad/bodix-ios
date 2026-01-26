@@ -19,10 +19,20 @@ final class StepsManager {
 
     // MARK: - Singleton
     static let shared = StepsManager()
-    private init() {}
+    
+    private init() {
+        if !defaults.bool(forKey: hasLaunchedBeforeKey) {
+            // 🔥 İlk dəfə açılır
+            defaults.set(true, forKey: hasLaunchedBeforeKey)
+            defaults.set(DistanceUnit.km.rawValue, forKey: distanceUnitKey)
+        }
+    }
+
 
     private let pedometer = CMPedometer()
     private let defaults = UserDefaults.standard
+    private let hasLaunchedBeforeKey = "hasLaunchedBefore"
+
 
 
 

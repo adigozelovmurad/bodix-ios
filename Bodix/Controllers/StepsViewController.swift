@@ -28,8 +28,18 @@ struct StepsData {
     }
 }
 
+
+
 // MARK: - Steps View Controller
 final class StepsViewController: UIViewController {
+
+    enum StepsEntryPoint {
+        case normal
+        case weeklyProgress
+    }
+
+    var entryPoint: StepsEntryPoint = .normal
+
 
     // MARK: - Motion
     private let pedometer = CMPedometer()
@@ -41,7 +51,6 @@ final class StepsViewController: UIViewController {
     private var isPedometerRunning = false
     private var didStartPedometer = false
     private var didReturnFromSettings = false
-    private var didHandlePermissionOnce = false
     private var shouldShowPermissionUI = true
     private var didReachGoal = false
 
@@ -178,16 +187,24 @@ final class StepsViewController: UIViewController {
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        print("📐 chart frame:", weeklyChartView.frame)
+        // 1️⃣ Dərhal UI doldur (cache / Health)
+        loadTodaySnapshot()
 
-        if didReturnFromSettings {
-            handlePermissionStateOnAppear()
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.handlePermissionStateOnAppear()
+        // 2️⃣ Permission + live pedometer
+        handlePermissionStateOnAppear()
+
+        // 3️⃣ Entry point scroll
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            switch self.entryPoint {
+            case .weeklyProgress:
+                self.scrollToWeeklyProgress()
+            case .normal:
+                self.scrollToTop()
             }
+            self.entryPoint = .normal
         }
     }
+
 
     private func handlePermissionStateOnAppear() {
         let status = CMPedometer.authorizationStatus()
@@ -272,6 +289,57 @@ final class StepsViewController: UIViewController {
 
         present(vc, animated: true)
     }
+
+
+    func scrollToTop(animated: Bool = true) {
+        scrollView.setContentOffset(.zero, animated: animated)
+    }
+
+    func highlightTitle() {
+        guard let navBar = navigationController?.navigationBar else { return }
+
+        UIView.animate(withDuration: 0.15) {
+            navBar.alpha = 0.6
+        } completion: { _ in
+            UIView.animate(withDuration: 0.2) {
+                navBar.alpha = 1.0
+            }
+        }
+    }
+
+    private func loadTodaySnapshot() {
+        StepsManager.shared.fetchTodayStats { [weak self] steps, distance, calories in
+            guard let self else { return }
+
+            self.stepsData.steps = steps
+            self.stepsData.distance = distance
+            self.stepsData.calories = calories
+            self.stepsData.goalSteps = StepsManager.shared.dailyGoal
+
+            DispatchQueue.main.async {
+                self.updateUI()
+            }
+        }
+    }
+
+
+    func scrollToWeeklyProgress(animated: Bool = true) {
+        let y = weeklyProgressTitle.frame.minY - 20
+        scrollView.setContentOffset(CGPoint(x: 0, y: max(0, y)), animated: animated)
+    }
+
+    func highlightWeeklyTitle() {
+        UIView.animate(withDuration: 0.15) {
+            self.weeklyProgressTitle.alpha = 0.5
+        } completion: { _ in
+            UIView.animate(withDuration: 0.2) {
+                self.weeklyProgressTitle.alpha = 1.0
+            }
+        }
+    }
+
+
+
 
     private func calculateWeeklySummary(from data: [DaySteps]) -> (steps: Int, distance: Double, calories: Double) {
         let totalSteps = data.reduce(0) { $0 + $1.steps }

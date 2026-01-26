@@ -45,10 +45,11 @@ final class HomeViewController: UIViewController {
     private let caloriesStat = HomeStatView(value: "0 kcal", title: "Calories")
 
     // MARK: - Cards
+    
     private let workoutCard = HomeCardView(
-        title: "Activity Today",
-        subtitle: "Track your movement",
-        icon: "figure.walk.motion"
+        title: "Weekly Progress",
+        subtitle: "View your activity this week",
+        icon: "7.calendar"
     )
 
     private let timerCard = HomeCardView(
@@ -233,6 +234,8 @@ final class HomeViewController: UIViewController {
     private func setupActions() {
         timerCard.addTarget(self, action: #selector(openTimer), for: .touchUpInside)
         stepsCard.addTarget(self, action: #selector(openSteps), for: .touchUpInside)
+        workoutCard.addTarget(self, action: #selector(openWeeklyProgress), for: .touchUpInside)
+
     }
 
     @objc private func openSteps() {
@@ -255,9 +258,7 @@ final class HomeViewController: UIViewController {
 
         if isExpanded {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                let vc = StepsViewController()
-                vc.hidesBottomBarWhenPushed = true
-                self.navigationController?.pushViewController(vc, animated: true)
+                self.tabBarController?.selectedIndex = 2
             }
         }
     }
@@ -265,6 +266,24 @@ final class HomeViewController: UIViewController {
     @objc private func openTimer() {
         tabBarController?.selectedIndex = 1
     }
+
+    @objc private func openWeeklyProgress() {
+        guard let tabBar = tabBarController else { return }
+
+        tabBar.selectedIndex = 2
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            if
+                let nav = tabBar.viewControllers?[2] as? UINavigationController,
+                let stepsVC = nav.viewControllers.first as? StepsViewController
+            {
+                stepsVC.entryPoint = .weeklyProgress
+                stepsVC.highlightWeeklyTitle()
+            }
+        }
+    }
+
+
 
     // MARK: - Goal Observer
     private func observeGoalChanges() {
