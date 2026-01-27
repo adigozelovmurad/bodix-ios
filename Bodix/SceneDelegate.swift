@@ -14,7 +14,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-        //   StepsManager.shared.prewarm()
+          StepsManager.shared.prewarm()
         AppearanceManager.shared.applyAppearance()
     }
 

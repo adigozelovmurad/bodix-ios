@@ -14,6 +14,13 @@ enum HomeCardType {
 
 final class HomeCardView: UIControl {
 
+    enum MiniCircleMode {
+        case none          // Quick Timer
+        case daily         // Steps Today
+        case weekly        // Weekly Progress
+    }
+
+
     private let cardType: HomeCardType
     private var brandColor: UIColor = UIColor(named: "BrandPrimary") ?? .systemBlue
     private let iconView = UIImageView()
@@ -26,6 +33,7 @@ final class HomeCardView: UIControl {
     private var didCelebrateGoal = false
     private var isExpanded = false
     private var originalHeight: CGFloat = 100
+    var miniCircleMode: MiniCircleMode = .none
 
 
     
@@ -170,6 +178,24 @@ final class HomeCardView: UIControl {
             didCelebrateGoal = false
         }
     }
+
+    func updateMiniCircle(progress: Double) {
+        guard miniCircleMode != .none else { return }
+
+        let clamped = min(max(progress, 0), 1)
+        progressView.isHidden = false
+        progressView.setProgress(clamped, animated: true)
+        progressView.setColor(brandColor)
+    }
+
+    func setMiniCirclePassive() {
+        progressView.isHidden = false
+        progressView.setProgress(0, animated: false)
+        progressView.setColor(.systemGray4)
+        progressView.alpha = 0.35
+    }
+
+
 
     func setAccentColor(_ color: UIColor) {
         self.brandColor = color

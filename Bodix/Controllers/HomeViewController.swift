@@ -85,6 +85,12 @@ final class HomeViewController: UIViewController {
         workoutCard.setAccentColor(brandColor)
         timerCard.setAccentColor(brandColor)
         stepsCard.setAccentColor(brandColor)
+
+        workoutCard.miniCircleMode = .weekly
+        stepsCard.miniCircleMode = .daily
+        timerCard.miniCircleMode = .none
+        timerCard.setMiniCirclePassive()
+
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -142,6 +148,21 @@ final class HomeViewController: UIViewController {
                 } else {
                     self.stepsCard.updateSubtitle("Today • \(diffText)")
                 }
+
+                // 🟣 Weekly mini circle üçün progress
+                let weeklyGoal = goal * 7
+
+                StepsManager.shared.fetchWeeklySteps { [weak self] days in
+                    guard let self else { return }
+
+                    let total = days.reduce(0) { $0 + $1.steps }
+                    let weeklyProgress = Double(total) / Double(weeklyGoal)
+
+                    DispatchQueue.main.async {
+                        self.workoutCard.updateMiniCircle(progress: weeklyProgress)
+                    }
+                }
+
 
                 // Skeleton hide
                 self.workoutCard.hideSkeleton()

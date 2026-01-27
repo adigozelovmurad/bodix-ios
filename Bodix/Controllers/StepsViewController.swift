@@ -285,9 +285,14 @@ final class StepsViewController: UIViewController {
             sheet.largestUndimmedDetentIdentifier = .medium
             sheet.preferredCornerRadius = 20
             sheet.prefersScrollingExpandsWhenScrolledToEdge = false
+
+
         }
 
         present(vc, animated: true)
+
+
+
     }
 
 
@@ -684,8 +689,8 @@ final class StepsViewController: UIViewController {
         loadWeeklySteps()
     }
 
-
     @objc private func editGoalTapped() {
+
         let alert = UIAlertController(
             title: "Daily Steps Goal",
             message: "Set your daily step target",
@@ -694,7 +699,6 @@ final class StepsViewController: UIViewController {
 
         alert.addTextField { textField in
             textField.keyboardType = .numberPad
-            textField.placeholder = "10000"
             textField.text = "\(self.stepsData.goalSteps)"
         }
 
@@ -706,17 +710,17 @@ final class StepsViewController: UIViewController {
                 let text = alert.textFields?.first?.text,
                 let goal = Int(text),
                 goal >= 1000
-            else {
-                return
-            }
+            else { return }
 
             StepsManager.shared.dailyGoal = goal
             HapticManager.shared.success()
-
             self.loadWeeklySteps()
         })
 
-        present(alert, animated: true)
+        // 🔥 YALNIZ BURADA, 1 DƏFƏ
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            self.present(alert, animated: true)
+        }
     }
 
     // MARK: - Helpers
@@ -739,6 +743,8 @@ final class StepsViewController: UIViewController {
 
         present(alert, animated: true)
     }
+
+    
 
     private func formatNumber(_ n: Int) -> String {
         let f = NumberFormatter()
